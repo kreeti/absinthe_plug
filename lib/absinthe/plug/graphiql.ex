@@ -321,7 +321,7 @@ defmodule Absinthe.Plug.GraphiQL do
 
   defp find_socket_path(conn, socket) do
     if endpoint = conn.private[:phoenix_endpoint] do
-      Enum.find_value(endpoint.__sockets__, :error, fn
+      Enum.find_value(endpoint.__sockets__(), :error, fn
         # Phoenix 1.4
         {path, ^socket, _opts} -> {:ok, path}
         # Phoenix <= 1.3
@@ -395,8 +395,11 @@ defmodule Absinthe.Plug.GraphiQL do
 
   defp js_escape(string) do
     string
-    |> String.replace(~r/\n/, "\\n")
-    |> String.replace(~r/'/, "\\'")
+    |> String.replace("\\", "\\\\")
+    |> String.replace("'", "\\'")
+    |> String.replace("\n", "\\n")
+    |> String.replace("\r", "\\r")
+    |> String.replace("</", "<\\/")
   end
 
   defp handle_default_headers(config, conn) do

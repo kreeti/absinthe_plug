@@ -1,13 +1,13 @@
 defmodule Absinthe.Plug.Mixfile do
   use Mix.Project
 
-  @version "1.5.8"
+  @version "1.5.10"
 
   def project do
     [
       app: :absinthe_plug,
       version: @version,
-      elixir: "~> 1.10",
+      elixir: "~> 1.17",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -31,7 +31,7 @@ defmodule Absinthe.Plug.Mixfile do
       licenses: ["MIT"],
       links: %{
         Website: "https://absinthe-graphql.org",
-        Changelog: "https://github.com/absinthe-graphql/absinthe_plug/blob/master/CHANGELOG.md",
+        Changelog: "https://github.com/absinthe-graphql/absinthe_plug/blob/main/CHANGELOG.md",
         GitHub: "https://github.com/absinthe-graphql/absinthe_plug"
       }
     ]

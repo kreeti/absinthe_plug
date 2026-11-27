@@ -449,12 +449,16 @@ defmodule Absinthe.PlugTest do
     assert expected == resp_body
   end
 
-  test "Subscriptions over HTTP with Server Sent Events chunked response" do
-    TestPubSub.start_link()
-    Absinthe.Subscription.start_link(TestPubSub)
+  test "Subscriptions over HTTP with Server Sent Events chunked response (non standard)" do
+    start_supervised!(%{id: TestPubSub, start: {TestPubSub, :start_link, []}})
+
+    start_supervised!(%{
+      id: Absinthe.Subscription,
+      start: {Absinthe.Subscription, :start_link, [TestPubSub]}
+    })
 
     query = "subscription {update}"
-    opts = Absinthe.Plug.init(schema: TestSchema, pubsub: TestPubSub)
+    opts = Absinthe.Plug.init(schema: TestSchema, pubsub: TestPubSub, standard_sse: false)
 
     request =
       Task.async(fn ->
@@ -480,6 +484,42 @@ defmodule Absinthe.PlugTest do
     assert length(events) == 2
     assert Enum.member?(events, %{"data" => %{"update" => "FOO"}})
     assert Enum.member?(events, %{"data" => %{"update" => "BAR"}})
+  end
+
+  test "Subscriptions over HTTP with Server Sent Events chunked response (standard)" do
+    start_supervised!(%{id: TestPubSub, start: {TestPubSub, :start_link, []}})
+
+    start_supervised!(%{
+      id: Absinthe.Subscription,
+      start: {Absinthe.Subscription, :start_link, [TestPubSub]}
+    })
+
+    query = "subscription {update}"
+    opts = Absinthe.Plug.init(schema: TestSchema, pubsub: TestPubSub, standard_sse: true)
+
+    request =
+      Task.async(fn ->
+        conn(:post, "/", query: query)
+        |> put_req_header("content-type", "application/json")
+        |> plug_parser
+        |> Absinthe.Plug.call(opts)
+      end)
+
+    Process.sleep(200)
+    Absinthe.Subscription.publish(TestPubSub, "FOO", update: "*")
+    Absinthe.Subscription.publish(TestPubSub, "BAR", update: "*")
+    send(request.pid, :close)
+
+    conn = Task.await(request)
+    {_module, state} = conn.adapter
+
+    [event1, event2] = String.split(state.chunks, "\n\n", trim: true)
+
+    assert "event: next\ndata: " <> event1_data = event1
+    assert "event: next\ndata: " <> event2_data = event2
+
+    assert Jason.decode!(event1_data) == %{"data" => %{"update" => "FOO"}}
+    assert Jason.decode!(event2_data) == %{"data" => %{"update" => "BAR"}}
   end
 
   @query """
@@ -692,18 +732,20 @@ defmodule Absinthe.PlugTest do
   defmodule NotaSchema do
   end
 
-  @message_matcher ~r/not a valid `Absinthe.Schema`/
-  test "schema module validation checks" do
-    assert_raise ArgumentError, @message_matcher, fn ->
-      Absinthe.Plug.init(schema: :not_a_module)
+  describe "schema module validation checks" do
+    test "not an atom" do
+      error = ~r/not a valid `Absinthe.Schema`, expected an atom/
+      assert_raise ArgumentError, error, fn -> Absinthe.Plug.init(schema: "not even an atom") end
     end
 
-    assert_raise ArgumentError, @message_matcher, fn ->
-      Absinthe.Plug.init(schema: NotaSchema)
+    test "not a module" do
+      error = ~r/could not load module :not_a_module due to reason :nofile/
+      assert_raise ArgumentError, error, fn -> Absinthe.Plug.init(schema: :not_a_module) end
     end
 
-    assert_raise ArgumentError, @message_matcher, fn ->
-      Absinthe.Plug.init(schema: "not even an atom")
+    test "not a schema" do
+      error = ~r/not a valid `Absinthe.Schema`/
+      assert_raise ArgumentError, error, fn -> Absinthe.Plug.init(schema: NotaSchema) end
     end
   end
 
